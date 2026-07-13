@@ -11,12 +11,11 @@ export async function POST(req: NextRequest) {
 
     if (!callLogId) {
       return new NextResponse(
-        `<Response><Say>Session error. Goodbye.</Say><Hangup/></Response>`,
+        `<Response><Speak>Session expired. Goodbye.</Speak><Hangup/></Response>`,
         { headers: { "Content-Type": "text/xml" } }
       );
     }
 
-    // 1. Fetch Call Log, Campaign, and Customer
     const callLog = await prisma.callLog.findUnique({
       where: { id: callLogId },
       include: { customer: true, campaign: true },
@@ -24,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     if (!callLog) {
       return new NextResponse(
-        `<Response><Say>Session not found. Goodbye.</Say><Hangup/></Response>`,
+        `<Response><Speak>Session not found. Goodbye.</Speak><Hangup/></Response>`,
         { headers: { "Content-Type": "text/xml" } }
       );
     }
@@ -32,36 +31,35 @@ export async function POST(req: NextRequest) {
     const campaign = callLog.campaign;
     const orgId = callLog.organizationId;
 
-    // 2. Parse Twilio Speech Result
+    // Parse Plivo input parameters
     const formData = await req.formData();
     const speechResult = formData.get("SpeechResult")?.toString() || "";
 
-    // 3. Get organization settings for host webhook url
     const settings = await prisma.organizationSetting.findUnique({
       where: { organizationId: orgId }
     });
     const publicUrl = settings?.publicWebhookUrl || "";
     const speechLang = campaign.language || "en-IN";
 
-    // Handle empty speech / silence
+    // Handle silence / empty inputs
     if (!speechResult.trim()) {
       const promptAgainText = speechLang.startsWith("hi")
         ? "माफ़ कीजियेगा, मैंने कुछ सुना नहीं। क्या आप दोहरा सकते हैं?"
         : "I'm sorry, I didn't catch that. Could you please repeat?";
       
-      const retryTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+      const retryXml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${publicUrl}/api/twilio/gather?callLogId=${callLogId}" method="POST" speechTimeout="auto" language="${speechLang}">
+  <GetInput inputType="speech" action="${publicUrl}/api/webhooks/plivo/gather?callLogId=${callLogId}" method="POST" speechTimeout="auto" language="${speechLang}">
     <Play>${publicUrl}/api/twilio/audio?text=${encodeURIComponent(promptAgainText)}&amp;language=${campaign.language}&amp;voice=${campaign.voiceId}&amp;organizationId=${orgId}</Play>
-  </Gather>
-  <Say language="${speechLang === "hi-IN" ? "hi-IN" : "en-IN"}">Goodbye.</Say>
+  </GetInput>
+  <Speak language="${speechLang === "hi-IN" ? "hi-IN" : "en-IN"}">Goodbye.</Speak>
   <Hangup/>
 </Response>`;
 
-      return new NextResponse(retryTwiml, { headers: { "Content-Type": "text/xml" } });
+      return new NextResponse(retryXml, { headers: { "Content-Type": "text/xml" } });
     }
 
-    // 4. Query LLM via central Conversation Service
+    // Call Conversation Service to process turn
     const aiResponse = await processConversationTurn(
       orgId,
       callLogId,
@@ -70,33 +68,33 @@ export async function POST(req: NextRequest) {
       false // isFirstTurn
     );
 
-    // 5. Check if call should hang up (closing remarks or DNC opt-out)
+    // Check if call should conclude
     if (isCallClosingRemark(aiResponse) || callLog.leadStatus === "DO_NOT_CALL") {
-      const endTwiml = `<?xml version="1.5" encoding="UTF-8"?>
+      const endXml = `<?xml version="1.5" encoding="UTF-8"?>
 <Response>
   <Play>${publicUrl}/api/twilio/audio?text=${encodeURIComponent(aiResponse)}&amp;language=${campaign.language}&amp;voice=${campaign.voiceId}&amp;organizationId=${orgId}</Play>
   <Hangup/>
 </Response>`;
-      return new NextResponse(endTwiml, { headers: { "Content-Type": "text/xml" } });
+      return new NextResponse(endXml, { headers: { "Content-Type": "text/xml" } });
     }
 
-    // 6. Otherwise, continue gather loop
-    const loopTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+    // Continue gather dialogue loop
+    const loopXml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${publicUrl}/api/twilio/gather?callLogId=${callLogId}" method="POST" speechTimeout="auto" language="${speechLang}">
+  <GetInput inputType="speech" action="${publicUrl}/api/webhooks/plivo/gather?callLogId=${callLogId}" method="POST" speechTimeout="auto" language="${speechLang}">
     <Play>${publicUrl}/api/twilio/audio?text=${encodeURIComponent(aiResponse)}&amp;language=${campaign.language}&amp;voice=${campaign.voiceId}&amp;organizationId=${orgId}</Play>
-  </Gather>
-  <Say language="${speechLang === "hi-IN" ? "hi-IN" : "en-IN"}">Closing call. Goodbye.</Say>
+  </GetInput>
+  <Speak language="${speechLang === "hi-IN" ? "hi-IN" : "en-IN"}">Closing call. Goodbye.</Speak>
   <Hangup/>
 </Response>`;
 
-    return new NextResponse(loopTwiml, {
+    return new NextResponse(loopXml, {
       headers: { "Content-Type": "text/xml" },
     });
   } catch (error: any) {
-    logger.error({ err: error.message }, "Gather API error");
+    logger.error({ err: error.message }, "Plivo Gather webhook crash");
     return new NextResponse(
-      `<Response><Say>Error processing response. Goodbye.</Say><Hangup/></Response>`,
+      `<Response><Speak>Error processing voice input. Goodbye.</Speak><Hangup/></Response>`,
       { headers: { "Content-Type": "text/xml" } }
     );
   }

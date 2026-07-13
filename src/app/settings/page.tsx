@@ -6,12 +6,13 @@ import {
   Save,
   Key,
   Volume2,
-  Globe,
   CheckCircle,
-  HelpCircle,
   Eye,
   EyeOff,
-  Smartphone
+  Smartphone,
+  Check,
+  XCircle,
+  RefreshCw
 } from "lucide-react";
 
 export default function Settings() {
@@ -26,6 +27,12 @@ export default function Settings() {
   const [twilioPhoneNumber, setTwilioPhoneNumber] = useState("");
   const [publicWebhookUrl, setPublicWebhookUrl] = useState("");
 
+  // Plivo Telephony States
+  const [plivoAuthId, setPlivoAuthId] = useState("");
+  const [plivoAuthToken, setPlivoAuthToken] = useState("");
+  const [plivoPhoneNumber, setPlivoPhoneNumber] = useState("");
+  const [geminiModel, setGeminiModel] = useState("gemini-3.1-flash-lite");
+
   // Default campaign parameters
   const [defaultVoiceId, setDefaultVoiceId] = useState("meera");
   const [defaultLanguage, setDefaultLanguage] = useState("en-IN");
@@ -36,6 +43,12 @@ export default function Settings() {
   const [showOpenai, setShowOpenai] = useState(false);
   const [showTwilioSid, setShowTwilioSid] = useState(false);
   const [showTwilioToken, setShowTwilioToken] = useState(false);
+  const [showPlivoId, setShowPlivoId] = useState(false);
+  const [showPlivoToken, setShowPlivoToken] = useState(false);
+
+  // Testing indicators
+  const [testingTarget, setTestingTarget] = useState<string | null>(null);
+  const [testStatuses, setTestStatuses] = useState<Record<string, { success: boolean; message: string }>>({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,6 +67,10 @@ export default function Settings() {
         setTwilioAuthToken(data.twilioAuthToken || "");
         setTwilioPhoneNumber(data.twilioPhoneNumber || "");
         setPublicWebhookUrl(data.publicWebhookUrl || "");
+        setPlivoAuthId(data.plivoAuthId || "");
+        setPlivoAuthToken(data.plivoAuthToken || "");
+        setPlivoPhoneNumber(data.plivoPhoneNumber || "");
+        setGeminiModel(data.geminiModel || "gemini-3.1-flash-lite");
         setDefaultVoiceId(data.defaultVoiceId || "meera");
         setDefaultLanguage(data.defaultLanguage || "en-IN");
       }
@@ -67,6 +84,48 @@ export default function Settings() {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // Run Connection Tests
+  async function testConnection(target: "gemini" | "sarvam" | "twilio" | "plivo") {
+    try {
+      setTestingTarget(target);
+      const payload: Record<string, any> = {};
+
+      if (target === "gemini") {
+        payload.geminiApiKey = geminiApiKey;
+        payload.geminiModel = geminiModel;
+      } else if (target === "sarvam") {
+        payload.sarvamApiKey = sarvamApiKey;
+      } else if (target === "twilio") {
+        payload.twilioAccountSid = twilioAccountSid;
+        payload.twilioAuthToken = twilioAuthToken;
+        payload.twilioPhoneNumber = twilioPhoneNumber;
+      } else if (target === "plivo") {
+        payload.plivoAuthId = plivoAuthId;
+        payload.plivoAuthToken = plivoAuthToken;
+        payload.plivoPhoneNumber = plivoPhoneNumber;
+      }
+
+      const res = await fetch("/api/settings/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target, keys: payload }),
+      });
+
+      const data = await res.json();
+      setTestStatuses((prev) => ({
+        ...prev,
+        [target]: { success: data.success, message: data.message || "Failed connection test." },
+      }));
+    } catch (error: any) {
+      setTestStatuses((prev) => ({
+        ...prev,
+        [target]: { success: false, message: `Test execution crashed: ${error.message}` },
+      }));
+    } finally {
+      setTestingTarget(null);
+    }
+  }
 
   // Save settings
   async function handleSave(e: React.FormEvent) {
@@ -86,6 +145,10 @@ export default function Settings() {
           twilioAuthToken,
           twilioPhoneNumber,
           publicWebhookUrl,
+          plivoAuthId,
+          plivoAuthToken,
+          plivoPhoneNumber,
+          geminiModel,
           defaultVoiceId,
           defaultLanguage,
         }),
@@ -105,25 +168,16 @@ export default function Settings() {
   }
 
   const voicePresets = [
+    { id: "suvarna", name: "Suvarna (Marathi - Female)", lang: "mr-IN" },
     { id: "meera", name: "Meera (Hindi - Female)", lang: "hi-IN" },
     { id: "arvind", name: "Arvind (Hindi/English - Male)", lang: "hi-IN" },
-    { id: "pavithra", name: "Pavithra (Tamil - Female)", lang: "ta-IN" },
-    { id: "lalitha", name: "Lalitha (Telugu - Female)", lang: "te-IN" },
     { id: "gitika", name: "Gitika (Bengali - Female)", lang: "bn-IN" },
-    { id: "suvarna", name: "Suvarna (Marathi - Female)", lang: "mr-IN" },
-    { id: "kavya", name: "Kavya (Kannada - Female)", lang: "kn-IN" },
-    { id: "prathibha", name: "Prathibha (Malayalam - Female)", lang: "ml-IN" },
   ];
 
   const languages = [
+    { code: "mr-IN", name: "Marathi (मराठी)" },
     { code: "hi-IN", name: "Hindi (हिंदी)" },
     { code: "en-IN", name: "Indian English" },
-    { code: "ta-IN", name: "Tamil (தமிழ்)" },
-    { code: "te-IN", name: "Telugu (తెలుగు)" },
-    { code: "bn-IN", name: "Bengali (বাংলা)" },
-    { code: "mr-IN", name: "Marathi (मराठी)" },
-    { code: "kn-IN", name: "Kannada (ಕನ್ನಡ)" },
-    { code: "ml-IN", name: "Malayalam (മലയാളം)" },
   ];
 
   return (
@@ -135,7 +189,7 @@ export default function Settings() {
           System Settings & API Keys
         </h1>
         <p className="text-xs text-slate-400 mt-1 font-semibold">
-          Configure API connection parameters for Sarvam AI Voice, Gemini, and Twilio outbound calling.
+          Configure API credentials, choose models, and run live connection checks for Nashik Telecalling.
         </p>
       </div>
 
@@ -146,11 +200,82 @@ export default function Settings() {
       ) : (
         <form onSubmit={handleSave} className="space-y-6">
           {/* Card 1: AI API Keys */}
-          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
-            <h3 className="font-semibold text-sm text-slate-350 flex items-center gap-2 border-b border-slate-850 pb-3">
-              <Key size={16} className="text-indigo-400" />
-              AI Credentials Setup
-            </h3>
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+              <h3 className="font-semibold text-sm text-slate-300 flex items-center gap-2">
+                <Key size={16} className="text-indigo-400" />
+                Gemini & Sarvam Credentials
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={testingTarget !== null}
+                  onClick={() => testConnection("gemini")}
+                  className="px-2.5 py-1 text-[10px] bg-slate-850 border border-slate-800 rounded-lg text-slate-300 hover:text-indigo-400 flex items-center gap-1.5"
+                >
+                  {testingTarget === "gemini" && <RefreshCw size={10} className="animate-spin" />}
+                  Test Gemini
+                </button>
+                <button
+                  type="button"
+                  disabled={testingTarget !== null}
+                  onClick={() => testConnection("sarvam")}
+                  className="px-2.5 py-1 text-[10px] bg-slate-850 border border-slate-800 rounded-lg text-slate-300 hover:text-indigo-400 flex items-center gap-1.5"
+                >
+                  {testingTarget === "sarvam" && <RefreshCw size={10} className="animate-spin" />}
+                  Test Sarvam
+                </button>
+              </div>
+            </div>
+
+            {/* Test Status Indicator */}
+            {testStatuses.gemini && (
+              <div className={`p-2.5 rounded-lg text-[10px] flex items-start gap-1.5 font-medium ${testStatuses.gemini.success ? "bg-emerald-950/20 text-emerald-400 border border-emerald-900/20" : "bg-rose-950/20 text-rose-400 border border-rose-900/20"}`}>
+                {testStatuses.gemini.success ? <Check size={12} className="mt-0.5" /> : <XCircle size={12} className="mt-0.5" />}
+                <span>Gemini Diagnosis: {testStatuses.gemini.message}</span>
+              </div>
+            )}
+            {testStatuses.sarvam && (
+              <div className={`p-2.5 rounded-lg text-[10px] flex items-start gap-1.5 font-medium ${testStatuses.sarvam.success ? "bg-emerald-950/20 text-emerald-400 border border-emerald-900/20" : "bg-rose-950/20 text-rose-400 border border-rose-900/20"}`}>
+                {testStatuses.sarvam.success ? <Check size={12} className="mt-0.5" /> : <XCircle size={12} className="mt-0.5" />}
+                <span>Sarvam Diagnosis: {testStatuses.sarvam.message}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Gemini Key */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Gemini API Key</label>
+                <div className="relative">
+                  <input
+                    type={showGemini ? "text" : "password"}
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="Enter Google Gemini API Key"
+                    className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGemini(!showGemini)}
+                    className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showGemini ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Gemini Model */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Active Gemini Model</label>
+                <input
+                  type="text"
+                  value={geminiModel}
+                  onChange={(e) => setGeminiModel(e.target.value)}
+                  placeholder="e.g. gemini-3.1-flash-lite"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
+                />
+              </div>
+            </div>
 
             {/* Sarvam Key */}
             <div className="space-y-1">
@@ -171,63 +296,35 @@ export default function Settings() {
                   {showSarvam ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-550 pt-0.5">Required for high-quality Indic Speech-to-Text and Text-to-Speech voices.</p>
-            </div>
-
-            {/* Gemini Key */}
-            <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Gemini API Key</label>
-              <div className="relative">
-                <input
-                  type={showGemini ? "text" : "password"}
-                  value={geminiApiKey}
-                  onChange={(e) => setGeminiApiKey(e.target.value)}
-                  placeholder="Enter Google Gemini API Key"
-                  className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowGemini(!showGemini)}
-                  className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showGemini ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-550 pt-0.5">Required for conversational intelligence (summaries, classifications, RAG responses).</p>
-            </div>
-
-            {/* OpenAI Key */}
-            <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">OpenAI API Key (Optional)</label>
-              <div className="relative">
-                <input
-                  type={showOpenai ? "text" : "password"}
-                  value={openaiApiKey}
-                  onChange={(e) => setOpenaiApiKey(e.target.value)}
-                  placeholder="Enter OpenAI API Key"
-                  className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowOpenai(!showOpenai)}
-                  className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showOpenai ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-550 pt-0.5">Alternative LLM key used for conversation grounding.</p>
             </div>
           </div>
 
-          {/* Card 2: Twilio Settings (NEW DETAILS) */}
-          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
-            <h3 className="font-semibold text-sm text-slate-350 flex items-center gap-2 border-b border-slate-850 pb-3">
-              <Smartphone size={16} className="text-indigo-400" />
-              Twilio Outbound Calling Configuration
-            </h3>
+          {/* Card 2: Twilio Configuration */}
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+              <h3 className="font-semibold text-sm text-slate-300 flex items-center gap-2">
+                <Smartphone size={16} className="text-indigo-400" />
+                Twilio Provider Settings
+              </h3>
+              <button
+                type="button"
+                disabled={testingTarget !== null}
+                onClick={() => testConnection("twilio")}
+                className="px-2.5 py-1 text-[10px] bg-slate-850 border border-slate-800 rounded-lg text-slate-300 hover:text-indigo-400 flex items-center gap-1.5"
+              >
+                {testingTarget === "twilio" && <RefreshCw size={10} className="animate-spin" />}
+                Test Twilio
+              </button>
+            </div>
+
+            {testStatuses.twilio && (
+              <div className={`p-2.5 rounded-lg text-[10px] flex items-start gap-1.5 font-medium ${testStatuses.twilio.success ? "bg-emerald-950/20 text-emerald-400 border border-emerald-900/20" : "bg-rose-950/20 text-rose-400 border border-rose-900/20"}`}>
+                {testStatuses.twilio.success ? <Check size={12} className="mt-0.5" /> : <XCircle size={12} className="mt-0.5" />}
+                <span>Twilio Diagnosis: {testStatuses.twilio.message}</span>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Twilio SID */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Twilio Account SID</label>
                 <div className="relative">
@@ -248,7 +345,6 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Twilio Token */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Twilio Auth Token</label>
                 <div className="relative">
@@ -256,7 +352,7 @@ export default function Settings() {
                     type={showTwilioToken ? "text" : "password"}
                     value={twilioAuthToken}
                     onChange={(e) => setTwilioAuthToken(e.target.value)}
-                    placeholder="Enter Twilio Auth Token"
+                    placeholder="Twilio Auth Token"
                     className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
                   />
                   <button
@@ -271,7 +367,6 @@ export default function Settings() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Twilio Phone Number */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Twilio Phone Number</label>
                 <input
@@ -281,34 +376,110 @@ export default function Settings() {
                   placeholder="e.g. +15005550006"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
                 />
-                <p className="text-[9px] text-slate-550">Must include country code (e.g. +1 or +91).</p>
               </div>
 
-              {/* Public Webhook URL */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Public Webhook URL (ngrok)</label>
                 <input
                   type="text"
                   value={publicWebhookUrl}
                   onChange={(e) => setPublicWebhookUrl(e.target.value)}
-                  placeholder="e.g. https://1234-abcd.ngrok-free.app"
+                  placeholder="e.g. https://xxxx-xxxx.ngrok-free.app"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
                 />
-                <p className="text-[9px] text-slate-550">Your public ngrok tunnel URL where Twilio webhook calls are forwarded.</p>
               </div>
             </div>
           </div>
 
-          {/* Card 3: Default config */}
-          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
-            <h3 className="font-semibold text-sm text-slate-350 flex items-center gap-2 border-b border-slate-850 pb-3">
+          {/* Card 3: Plivo Configuration */}
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+              <h3 className="font-semibold text-sm text-slate-300 flex items-center gap-2">
+                <Smartphone size={16} className="text-indigo-400" />
+                Plivo Provider Settings (Nashik MVP)
+              </h3>
+              <button
+                type="button"
+                disabled={testingTarget !== null}
+                onClick={() => testConnection("plivo")}
+                className="px-2.5 py-1 text-[10px] bg-slate-850 border border-slate-800 rounded-lg text-slate-300 hover:text-indigo-400 flex items-center gap-1.5"
+              >
+                {testingTarget === "plivo" && <RefreshCw size={10} className="animate-spin" />}
+                Test Plivo
+              </button>
+            </div>
+
+            {testStatuses.plivo && (
+              <div className={`p-2.5 rounded-lg text-[10px] flex items-start gap-1.5 font-medium ${testStatuses.plivo.success ? "bg-emerald-950/20 text-emerald-400 border border-emerald-900/20" : "bg-rose-950/20 text-rose-400 border border-rose-900/20"}`}>
+                {testStatuses.plivo.success ? <Check size={12} className="mt-0.5" /> : <XCircle size={12} className="mt-0.5" />}
+                <span>Plivo Diagnosis: {testStatuses.plivo.message}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Plivo Auth ID</label>
+                <div className="relative">
+                  <input
+                    type={showPlivoId ? "text" : "password"}
+                    value={plivoAuthId}
+                    onChange={(e) => setPlivoAuthId(e.target.value)}
+                    placeholder="Enter Plivo Auth ID"
+                    className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPlivoId(!showPlivoId)}
+                    className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showPlivoId ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Plivo Auth Token</label>
+                <div className="relative">
+                  <input
+                    type={showPlivoToken ? "text" : "password"}
+                    value={plivoAuthToken}
+                    onChange={(e) => setPlivoAuthToken(e.target.value)}
+                    placeholder="Enter Plivo Auth Token"
+                    className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPlivoToken(!showPlivoToken)}
+                    className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showPlivoToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Plivo Phone Number</label>
+              <input
+                type="text"
+                value={plivoPhoneNumber}
+                onChange={(e) => setPlivoPhoneNumber(e.target.value)}
+                placeholder="e.g. +91XXXXXXXXXX"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Card 4: Default config */}
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-xl">
+            <h3 className="font-semibold text-sm text-slate-300 flex items-center gap-2 border-b border-slate-850 pb-3">
               <Volume2 size={16} className="text-indigo-400" />
-              Default Calling Config
+              Campaign Default Specifications
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Default Language</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Language</label>
                 <select
                   value={defaultLanguage}
                   onChange={(e) => setDefaultLanguage(e.target.value)}
@@ -321,7 +492,7 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Default Voice Preset</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Voice Preset</label>
                 <select
                   value={defaultVoiceId}
                   onChange={(e) => setDefaultVoiceId(e.target.value)}

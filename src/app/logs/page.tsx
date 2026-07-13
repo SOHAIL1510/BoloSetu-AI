@@ -16,6 +16,7 @@ import {
   Pause,
   Info
 } from "lucide-react";
+import { formatKolkataTime } from "@/lib/date";
 
 interface CallLog {
   id: string;
@@ -26,6 +27,7 @@ interface CallLog {
   sentimentScore: number;
   recordingUrl: string | null;
   createdAt: string;
+  telephonyProvider: string | null;
   customer: {
     name: string;
     phone: string;
@@ -203,9 +205,10 @@ export default function CallLogs() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-850 text-slate-500 font-bold uppercase tracking-wider">
-                  <th className="py-3.5 px-6">Customer / Campaign</th>
-                  <th className="py-3.5 px-6">Call Date</th>
+                <tr className="text-left text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-950/20">
+                  <th className="py-3.5 px-6">Customer</th>
+                  <th className="py-3.5 px-6">Provider</th>
+                  <th className="py-3.5 px-6">Date</th>
                   <th className="py-3.5 px-6">Duration</th>
                   <th className="py-3.5 px-6">Sentiment</th>
                   <th className="py-3.5 px-6 text-center">Status</th>
@@ -225,11 +228,11 @@ export default function CallLogs() {
                       </p>
                       <p className="text-[10px] text-slate-500 mt-0.5">{log.customer.phone} • {log.campaign.name}</p>
                     </td>
+                    <td className="py-4 px-6 text-slate-400 text-xs font-mono capitalize">
+                      {log.telephonyProvider || "twilio"}
+                    </td>
                     <td className="py-4 px-6 text-slate-400 font-medium">
-                      {new Date(log.createdAt).toLocaleString(undefined, {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                      {formatKolkataTime(log.createdAt)}
                     </td>
                     <td className="py-4 px-6 font-mono text-slate-400">
                       {Math.floor(log.duration / 60)}m {log.duration % 60}s
@@ -302,8 +305,8 @@ export default function CallLogs() {
                   <User size={16} className="text-indigo-400" />
                   {selectedLog.customer.name}
                 </h2>
-                <p className="text-[10px] text-slate-500 uppercase font-semibold mt-0.5">
-                  Call Record: {new Date(selectedLog.createdAt).toLocaleString()}
+                <p className="text-[10px] text-slate-550 uppercase font-semibold mt-0.5">
+                  Call Record: {formatKolkataTime(selectedLog.createdAt)}
                 </p>
               </div>
               <button onClick={() => setSelectedLog(null)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { processConversationTurn } from "@/services/ai/conversation.service";
+import plivo from "plivo";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     if (!customerId || !campaignId || !callLogId) {
       return new NextResponse(
-        `<Response><Say>Error. Missing session parameters.</Say><Reject/></Response>`,
+        `<Response><Speak>Error. Session parameters missing.</Speak><Hangup/></Response>`,
         { headers: { "Content-Type": "text/xml" } }
       );
     }
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     if (!callLog) {
       return new NextResponse(
-        `<Response><Say>Error. Call session log not found.</Say><Reject/></Response>`,
+        `<Response><Speak>Error. Call session log not found.</Speak><Hangup/></Response>`,
         { headers: { "Content-Type": "text/xml" } }
       );
     }
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     if (!campaign || !customer) {
       return new NextResponse(
-        `<Response><Say>Error. Customer or campaign not found.</Say><Reject/></Response>`,
+        `<Response><Speak>Error. Configuration mismatch.</Speak><Hangup/></Response>`,
         { headers: { "Content-Type": "text/xml" } }
       );
     }
@@ -43,7 +44,28 @@ export async function POST(req: NextRequest) {
     const settings = await prisma.organizationSetting.findUnique({ where: { organizationId: orgId } });
     const publicUrl = settings?.publicWebhookUrl || "";
 
-    // Generate AI Greeting Text via central Conversation Service
+    // Signature Validation where possible
+    const plivoSignature = req.headers.get("x-plivo-signature-v2");
+    const plivoNonce = req.headers.get("x-plivo-signature-v2-nonce");
+    if (plivoSignature && plivoNonce && settings?.plivoAuthToken) {
+      const { PlivoProvider } = require("@/services/telephony/providers/plivo.provider");
+      const plivoProvider = new PlivoProvider();
+      const isValid = plivoProvider.validateSignature(
+        req.url,
+        plivoNonce,
+        plivoSignature,
+        settings.plivoAuthToken
+      );
+      if (!isValid) {
+        logger.warn({ callLogId }, "Unauthorized Plivo webhook signature. Rejecting call.");
+        return new NextResponse(
+          `<Response><Speak>Security authorization check failed.</Speak><Hangup/></Response>`,
+          { headers: { "Content-Type": "text/xml" } }
+        );
+      }
+    }
+
+    // Generate AI Greeting Text (First Turn)
     const greeting = await processConversationTurn(
       orgId,
       callLogId,
@@ -54,28 +76,24 @@ export async function POST(req: NextRequest) {
 
     const speechLang = campaign.language || "en-IN";
 
-    // Generate TwiML XML
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    // Generate Plivo XML
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${publicUrl}/api/twilio/gather?callLogId=${callLogId}" method="POST" speechTimeout="auto" language="${speechLang}">
+  <GetInput inputType="speech" action="${publicUrl}/api/webhooks/plivo/gather?callLogId=${callLogId}" method="POST" speechTimeout="auto" language="${speechLang}">
     <Play>${publicUrl}/api/twilio/audio?text=${encodeURIComponent(greeting)}&amp;language=${campaign.language}&amp;voice=${campaign.voiceId}&amp;organizationId=${orgId}</Play>
-  </Gather>
-  <Say language="${speechLang === "hi-IN" ? "hi-IN" : "en-IN"}">I didn't hear anything. Closing call. Goodbye.</Say>
+  </GetInput>
+  <Speak language="${speechLang === "hi-IN" ? "hi-IN" : "en-IN"}">I didn't hear anything. Goodbye.</Speak>
   <Hangup/>
 </Response>`;
 
-    return new NextResponse(twiml, {
+    return new NextResponse(xml, {
       headers: { "Content-Type": "text/xml" },
     });
   } catch (error: any) {
-    logger.error({ err: error.message }, "Twiml API error");
+    logger.error({ err: error.message }, "Plivo Answer webhook crash");
     return new NextResponse(
-      `<Response><Say>Error occurred. Goodbye.</Say><Hangup/></Response>`,
+      `<Response><Speak>Internal connection error occurred. Goodbye.</Speak><Hangup/></Response>`,
       { headers: { "Content-Type": "text/xml" } }
     );
   }
-}
-
-export async function GET(req: NextRequest) {
-  return POST(req);
 }

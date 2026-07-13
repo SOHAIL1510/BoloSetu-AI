@@ -96,14 +96,28 @@ export async function POST(req: NextRequest) {
     let callLog;
     let operation = "CREATE";
 
-    // 1. Try to find and update existing log by ID
-    if (id) {
+    const resolvedProvider = body.telephonyProvider || "simulator";
+    const resolvedProviderCallId = body.providerCallId || callSid || id;
+
+    // 1. Try to find and update existing log by various matching criteria (ID, ProviderCallID, CallSid)
+    if (resolvedProviderCallId) {
       const existing = await prisma.callLog.findFirst({
-        where: { id, organizationId: orgId }
+        where: {
+          organizationId: orgId,
+          OR: [
+            { id: resolvedProviderCallId },
+            { callSid: resolvedProviderCallId },
+            {
+              telephonyProvider: resolvedProvider,
+              providerCallId: resolvedProviderCallId,
+            },
+          ],
+        },
       });
+
       if (existing) {
         callLog = await prisma.callLog.update({
-          where: { id },
+          where: { id: existing.id },
           data: {
             duration: duration !== undefined ? Number(duration) : undefined,
             transcriptJSON: transcriptJSON ? (typeof transcriptJSON === "string" ? transcriptJSON : JSON.stringify(transcriptJSON)) : undefined,
@@ -114,38 +128,19 @@ export async function POST(req: NextRequest) {
           },
           include: { customer: true }
         });
-        operation = "UPDATE_BY_ID";
+        operation = "UPDATE";
       }
     }
 
-    // 2. Try to find and update existing log by Call SID
-    if (!callLog && callSid) {
-      const existing = await prisma.callLog.findFirst({
-        where: { callSid, organizationId: orgId }
-      });
-      if (existing) {
-        callLog = await prisma.callLog.update({
-          where: { callSid },
-          data: {
-            duration: duration !== undefined ? Number(duration) : undefined,
-            transcriptJSON: transcriptJSON ? (typeof transcriptJSON === "string" ? transcriptJSON : JSON.stringify(transcriptJSON)) : undefined,
-            summary: summary || undefined,
-            leadStatus: leadStatus || undefined,
-            sentimentScore: sentimentScore !== undefined ? Number(sentimentScore) : undefined,
-            recordingUrl: recordingUrl || undefined,
-          },
-          include: { customer: true }
-        });
-        operation = "UPDATE_BY_SID";
-      }
-    }
-
-    // 3. Fallback to Create new CallLog
+    // 2. Create new CallLog if not found
     if (!callLog) {
-      const generatedSid = callSid || `sim-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+      const generatedSid = resolvedProviderCallId || `sim-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
       callLog = await prisma.callLog.create({
         data: {
+          id: generatedSid.startsWith("attempt-") || generatedSid.startsWith("sim-") ? generatedSid : undefined,
           callSid: generatedSid,
+          telephonyProvider: resolvedProvider,
+          providerCallId: resolvedProviderCallId || generatedSid,
           organizationId: orgId,
           customerId,
           campaignId,

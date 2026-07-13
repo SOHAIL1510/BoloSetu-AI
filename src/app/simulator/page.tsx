@@ -362,6 +362,7 @@ export default function CallSimulator() {
             body: JSON.stringify({
               customerId: customer.id,
               campaignId: selectedCampaignId,
+              callLogId: generatedSid,
               messages: [],
               isFirstTurn: true,
             }),
@@ -454,6 +455,7 @@ export default function CallSimulator() {
         body: JSON.stringify({
           customerId: activeCustomer.id,
           campaignId: selectedCampaignId,
+          callLogId: activeCallSid,
           messages: updatedMessages,
           isFirstTurn: false,
         }),
@@ -487,6 +489,7 @@ export default function CallSimulator() {
         body: JSON.stringify({
           customerId: activeCustomer.id,
           campaignId: selectedCampaignId,
+          callLogId: activeCallSid,
           messages: messages,
           isHangUp: true,
         }),
@@ -917,7 +920,8 @@ export default function CallSimulator() {
                     setActiveCustomer(null);
                     setActiveCallLogId(null);
                   } : hangUpCall}
-                  className="w-full py-2.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/20 transition-all uppercase tracking-wider"
+                  disabled={useTwilioCall ? false : (callState !== "connected")}
+                  className="w-full py-2.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/20 transition-all uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <PhoneOff size={14} />
                   {useTwilioCall ? "Abort Monitor Panel" : "End Call (Hang Up)"}

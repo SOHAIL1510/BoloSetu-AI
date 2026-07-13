@@ -2,6 +2,7 @@ import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { initiateCall } from "@/services/telephony/telephony.service";
 
 // 1. Campaign Orchestrator: Triggered when a campaign is started
 const processCampaign = inngest.createFunction(
@@ -85,26 +86,6 @@ const dialCustomer = inngest.createFunction(
 
     logger.info({ customerId, campaignId, organizationId }, "Worker executing dialCustomer background job");
 
-    // Fetch organization credentials
-    const settings = await step.run("fetch-organization-settings", async () => {
-      return await prisma.organizationSetting.findUnique({
-        where: { organizationId },
-      });
-    });
-
-    const accountSid = settings?.twilioAccountSid;
-    const authToken = settings?.twilioAuthToken;
-    const fromPhone = settings?.twilioPhoneNumber;
-    const publicUrl = settings?.publicWebhookUrl;
-
-    if (!accountSid || !authToken || !fromPhone || !publicUrl) {
-      logger.error(
-        { organizationId, customerId },
-        "Twilio configuration missing for organization. Dial aborted."
-      );
-      return { success: false, reason: "Missing credentials" };
-    }
-
     // Fetch customer details
     const customer = await step.run("fetch-customer", async () => {
       return await prisma.customer.findUnique({
@@ -117,17 +98,28 @@ const dialCustomer = inngest.createFunction(
       return { success: false, reason: "Customer skipped" };
     }
 
+    // DNC check
+    if (customer.doNotCall) {
+      logger.warn({ customerId }, "Customer registered in DNC. Skipping dial.");
+      return { success: false, reason: "DNC_SUPPRESSED" };
+    }
+
     // Format phone
     let toPhone = customer.phone;
     if (!toPhone.startsWith("+")) {
       toPhone = `+91${toPhone}`;
     }
 
+    // Generate stable call attempt idempotency key based on campaign & customer
+    const idempotencyKey = `attempt-${campaignId}-${customerId}`;
+
     // Trigger Outbound Dialing
-    const callResult = await step.run("trigger-twilio-call", async () => {
-      // 1. Create CallLog entry
-      const callLog = await prisma.callLog.create({
-        data: {
+    const callResult = await step.run("trigger-telephony-call", async () => {
+      // 1. Create or retrieve CallLog entry idempotently using the stable key as the primary ID
+      const callLog = await prisma.callLog.upsert({
+        where: { id: idempotencyKey },
+        create: {
+          id: idempotencyKey,
           organizationId,
           customerId,
           campaignId,
@@ -136,61 +128,48 @@ const dialCustomer = inngest.createFunction(
           leadStatus: "PENDING",
           sentimentScore: 50.0,
         },
+        update: {},
       });
 
-      const twilioEndpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`;
-      const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-
-      const twimlUrl = `${publicUrl}/api/twilio/twiml?customerId=${customerId}&campaignId=${campaignId}&callLogId=${callLog.id}`;
-      const statusCallbackUrl = `${publicUrl}/api/twilio/status?callLogId=${callLog.id}`;
-
-      const formData = new URLSearchParams();
-      formData.append("To", toPhone);
-      formData.append("From", fromPhone);
-      formData.append("Url", twimlUrl);
-      formData.append("Method", "POST");
-      formData.append("StatusCallback", statusCallbackUrl);
-      formData.append("StatusCallbackMethod", "POST");
-      formData.append("StatusCallbackEvent", "completed");
-
-      const response = await fetch(twilioEndpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: formData.toString(),
+      // 2. Place outbound call using Unified Telephony Service (Twilio/Plivo)
+      const dialResult = await initiateCall({
+        orgId: organizationId,
+        customerId,
+        campaignId,
+        to: toPhone,
+        idempotencyKey: idempotencyKey,
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        await prisma.callLog.delete({ where: { id: callLog.id } });
-        throw new Error(`Twilio call error: ${errText}`);
+      if (!dialResult.success) {
+        logger.error({ err: dialResult.error, customerId }, "Outbound call placement failed");
+        throw new Error(`TELEPHONY_CALL_FAILED: ${dialResult.error}`);
       }
 
-      const twilioCall = await response.json();
-
-      // Save callSid to database
+      // 3. Save provider IDs to database
       await prisma.callLog.update({
-        where: { id: callLog.id },
-        data: { callSid: twilioCall.sid },
+        where: { id: idempotencyKey },
+        data: {
+          telephonyProvider: dialResult.providerCallId?.startsWith("sim-") ? "simulator" : undefined, // resolves dynamically on status webhook
+          providerCallId: dialResult.providerCallId,
+          callSid: dialResult.providerCallId, // keep for Twilio backward compatibility
+        },
       });
 
-      // 2. Mark customer as IN_PROGRESS
+      // 4. Mark customer as IN_PROGRESS
       await prisma.customer.update({
         where: { id: customerId },
         data: { status: "IN_PROGRESS" },
       });
 
-      return { sid: twilioCall.sid, callLogId: callLog.id };
+      return { providerCallId: dialResult.providerCallId, callLogId: idempotencyKey };
     });
 
     logger.info(
-      { customerId, campaignId, twilioSid: callResult.sid },
+      { customerId, campaignId, providerCallId: callResult.providerCallId },
       "Outbound phone dial placed successfully in background"
     );
 
-    return { success: true, sid: callResult.sid };
+    return { success: true, providerCallId: callResult.providerCallId };
   }
 );
 

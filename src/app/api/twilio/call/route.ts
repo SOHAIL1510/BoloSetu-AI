@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { initiateCall } from "@/services/telephony/telephony.service";
 import { logger } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
@@ -20,27 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing customerId or campaignId" }, { status: 400 });
     }
 
-    // 1. Fetch Tenant Settings
-    const settings = await prisma.organizationSetting.findUnique({
-      where: { organizationId: orgId },
-    });
-
-    const accountSid = settings?.twilioAccountSid;
-    const authToken = settings?.twilioAuthToken;
-    const fromPhone = settings?.twilioPhoneNumber;
-    const publicUrl = settings?.publicWebhookUrl;
-
-    if (!accountSid || !authToken || !fromPhone || !publicUrl) {
-      return NextResponse.json(
-        {
-          error: "twilio_credentials_missing",
-          message: "Please configure Twilio credentials and your public webhook URL in Settings.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // 2. Fetch Customer and Campaign (ensure they belong to the same organization)
+    // 1. Fetch Customer and verify DNC status
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, organizationId: orgId },
     });
@@ -52,15 +33,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Customer or Campaign not found or access denied" }, { status: 404 });
     }
 
+    if (customer.doNotCall) {
+      return NextResponse.json(
+        { error: "dnc_suppressed", message: "Call aborted - number is in the DNC list." },
+        { status: 400 }
+      );
+    }
+
     // Format phone number
     let toPhone = customer.phone;
     if (!toPhone.startsWith("+")) {
       toPhone = `+91${toPhone}`;
     }
 
-    // 3. Create initial CallLog record in database scoped to the organization
-    const callLog = await prisma.callLog.create({
-      data: {
+    // Generate stable call attempt idempotency key
+    const idempotencyKey = `attempt-${campaignId}-${customerId}`;
+
+    // 2. Upsert CallLog record idempotently using the stable key as the primary ID
+    const callLog = await prisma.callLog.upsert({
+      where: { id: idempotencyKey },
+      create: {
+        id: idempotencyKey,
         organizationId: orgId,
         customerId,
         campaignId,
@@ -69,52 +62,37 @@ export async function POST(req: NextRequest) {
         leadStatus: "PENDING",
         sentimentScore: 50.0,
       },
+      update: {},
     });
 
-    // 4. Initiate Twilio REST Call
-    const twilioEndpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`;
-    const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-
-    const twimlUrl = `${publicUrl}/api/twilio/twiml?customerId=${customerId}&campaignId=${campaignId}&callLogId=${callLog.id}`;
-    const statusCallbackUrl = `${publicUrl}/api/twilio/status?callLogId=${callLog.id}`;
-
-    const formData = new URLSearchParams();
-    formData.append("To", toPhone);
-    formData.append("From", fromPhone);
-    formData.append("Url", twimlUrl);
-    formData.append("Method", "POST");
-    formData.append("StatusCallback", statusCallbackUrl);
-    formData.append("StatusCallbackMethod", "POST");
-    formData.append("StatusCallbackEvent", "completed");
-
-    const response = await fetch(twilioEndpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: formData.toString(),
+    // 3. Initiate Call via Unified Telephony Service
+    const dialResult = await initiateCall({
+      orgId,
+      customerId,
+      campaignId,
+      to: toPhone,
+      idempotencyKey: idempotencyKey,
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      logger.error({ err: errText, customerId }, "Twilio API REST connection failed");
-      await prisma.callLog.delete({ where: { id: callLog.id } });
+    if (!dialResult.success) {
+      logger.error({ err: dialResult.error, customerId }, "Outbound call placement failed");
       return NextResponse.json(
-        { error: "twilio_api_error", message: `Twilio failed: ${errText}` },
-        { status: response.status }
+        { error: "telephony_call_failed", message: `Outbound call failed: ${dialResult.error}` },
+        { status: 400 }
       );
     }
 
-    const callResult = await response.json();
-
-    // 5. Update CallLog with the Twilio Call SID
+    // 4. Update CallLog with provider mapping details
     await prisma.callLog.update({
-      where: { id: callLog.id },
-      data: { callSid: callResult.sid },
+      where: { id: idempotencyKey },
+      data: {
+        telephonyProvider: dialResult.providerCallId?.startsWith("sim-") ? "simulator" : undefined, // resolves dynamically on webhook
+        providerCallId: dialResult.providerCallId,
+        callSid: dialResult.providerCallId, // keep for Twilio backward compatibility
+      },
     });
 
-    // 6. Update Customer Calling State to IN_PROGRESS
+    // 5. Update Customer status to IN_PROGRESS
     await prisma.customer.update({
       where: { id: customerId },
       data: {
@@ -122,16 +100,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    logger.info({ callLogId: callLog.id, twilioSid: callResult.sid }, "Initiated live phone call via Twilio");
+    logger.info({ callLogId: idempotencyKey, providerCallId: dialResult.providerCallId }, "Initiated live phone call successfully");
 
     return NextResponse.json({
       success: true,
-      sid: callResult.sid,
-      callLogId: callLog.id,
-      message: "Twilio outbound phone call initiated successfully.",
+      sid: dialResult.providerCallId,
+      callLogId: idempotencyKey,
+      message: "Outbound phone call initiated successfully.",
     });
   } catch (error: any) {
     logger.error({ err: error.message }, "Outbound call API error");
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 550 });
   }
 }
