@@ -1,0 +1,153 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+model Organization {
+  id          String               @id @default(uuid())
+  name        String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  
+  users       User[]
+  campaigns   Campaign[]
+  customers   Customer[]
+  callLogs    CallLog[]
+  appointments Appointment[]
+  settings    OrganizationSetting?
+  knowledge   KnowledgeBase[]
+  notifications Notification[]
+}
+
+model User {
+  id             String       @id @default(uuid())
+  name           String?
+  email          String       @unique
+  passwordHash   String
+  role           String       @default("MEMBER") // "ADMIN", "MANAGER", "MEMBER"
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model OrganizationSetting {
+  id              String       @id @default(uuid())
+  organizationId  String       @unique
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sarvamApiKey    String?
+  geminiApiKey    String?
+  openaiApiKey    String?
+  twilioAccountSid String?
+  twilioAuthToken String?
+  twilioPhoneNumber String?
+  publicWebhookUrl String?
+  defaultVoiceId  String       @default("meera")
+  defaultLanguage String       @default("en-IN")
+  updatedAt       DateTime     @updatedAt
+}
+
+model Campaign {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  systemPrompt   String
+  voiceId        String          // e.g. "meera", "pavithra", "arvind"
+  language       String          // e.g. "hi-IN", "en-IN", "ta-IN", "te-IN"
+  status         String          @default("DRAFT") // "DRAFT", "SCHEDULED", "RUNNING", "PAUSED", "COMPLETED"
+  retryAttempts  Int             @default(3)
+  callTiming     String          @default("9:00 AM - 6:00 PM")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  customers      Customer[]
+  callLogs       CallLog[]
+  knowledgeBase  KnowledgeBase[]
+}
+
+model Customer {
+  id                  String        @id @default(uuid())
+  organizationId      String
+  organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  phone               String
+  email               String?
+  company             String?
+  city                String?
+  product             String?
+  previousInteraction String?
+  notes               String?
+  status              String        @default("PENDING") // "PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"
+  campaignId          String
+  campaign            Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  callLogs            CallLog[]
+  appointments        Appointment[]
+}
+
+model CallLog {
+  id             String         @id @default(uuid())
+  callSid        String?        @unique
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  campaignId     String
+  campaign       Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  duration       Int            @default(0) // in seconds
+  transcriptJSON String         // JSON string containing dialogue history [{role: 'ai'|'customer', text: string, timestamp: Date}]
+  summary        String?
+  leadStatus     String         @default("PENDING") // "INTERESTED", "VERY_INTERESTED", "CALLBACK_REQUESTED", "APPOINTMENT_BOOKED", "NOT_INTERESTED", "BUSY", "NO_ANSWER", "WRONG_NUMBER"
+  sentimentScore Float          @default(50.0) // 0 to 100
+  recordingUrl   String?
+  createdAt      DateTime       @default(now())
+  
+  appointments   Appointment[]
+  notifications  Notification[]
+}
+
+model Appointment {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  callLogId      String?
+  callLog        CallLog?     @relation(fields: [callLogId], references: [id], onDelete: SetNull)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  dateTime       DateTime
+  status         String       @default("CONFIRMED") // "CONFIRMED", "CANCELLED"
+  createdAt      DateTime     @default(now())
+}
+
+model KnowledgeBase {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  fileType       String       // e.g. "txt", "pdf", "faq"
+  contentText    String       // Stored raw text of the document for search context
+  campaignId     String?
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title          String
+  message        String
+  type           String       // "INFO", "SUCCESS", "WARNING", "ERROR"
+  isRead         Boolean      @default(false)
+  callLogId      String?
+  callLog        CallLog?     @relation(fields: [callLogId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+}
