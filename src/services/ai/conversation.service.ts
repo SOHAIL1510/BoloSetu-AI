@@ -176,6 +176,7 @@ export async function processConversationTurn(
     
     CRITICAL INSTRUCTIONS:
     - Always introduce and identify yourself as an AI assistant. Never pretend to be human.
+    - The customer's correct registered name is exactly "${customer.name || "Customer"}". Always address them using this exact name. Even if the speech-to-text transcript indicates a phonetically close spelling (such as Sahil, Sohal, etc.), always override it and use the correct name: "${customer.name || "Customer"}".
     - ${scriptInstruction}
     - Keep responses very short, friendly, and natural (1 to 2 sentences max).
     - Do not output markdown, formatting, or bullet points. Speak directly as if on a phone call.
