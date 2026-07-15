@@ -20,7 +20,6 @@ import {
   Menu,
   X,
   Phone,
-  ShieldCheck,
   LogOut,
   User as UserIcon
 } from "lucide-react";
@@ -137,8 +136,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* User Identity / Compliance Badge / Logout Area */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40 space-y-3">
+        {/* User Identity / Logout Area */}
+        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
           <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900 border border-slate-800/80">
             <div className="flex items-center gap-2 overflow-hidden">
               <div className="h-7 w-7 rounded-lg bg-indigo-950 border border-indigo-900/60 flex items-center justify-center text-indigo-400 text-xs font-bold shrink-0">
@@ -157,14 +156,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             >
               <LogOut size={14} />
             </button>
-          </div>
-
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-800/40">
-            <ShieldCheck className="text-emerald-500 shrink-0" size={18} />
-            <div className="text-left">
-              <p className="text-[10px] font-bold text-emerald-400 leading-none">AI Safety Compliant</p>
-              <p className="text-[8px] text-slate-550 leading-none mt-1">Identifies always as AI</p>
-            </div>
           </div>
         </div>
       </aside>
