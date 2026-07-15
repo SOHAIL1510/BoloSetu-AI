@@ -31,7 +31,7 @@ export default function LandingPage() {
             </div>
             <div>
               <h1 className="font-extrabold text-lg tracking-wider bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent uppercase">
-                Vani AI
+                BoloSetu AI
               </h1>
               <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Telecalling Agent</p>
             </div>
@@ -70,7 +70,7 @@ export default function LandingPage() {
             </span>
           </h2>
           <p className="text-sm md:text-base text-slate-400 leading-relaxed max-w-2xl mx-auto">
-            Vani AI is a production-grade multi-tenant SaaS platform that automates outbound lead qualification, demo scheduling, and call auditing using fluent Indian voice agents.
+            BoloSetu AI is a production-grade multi-tenant SaaS platform that automates outbound lead qualification, demo scheduling, and call auditing using fluent Indian voice agents.
           </p>
         </div>
 
@@ -96,7 +96,7 @@ export default function LandingPage() {
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60 z-10 pointer-events-none"></div>
             <img
               src="/landing_dashboard_preview.png"
-              alt="Vani AI Campaign Analytics Dashboard Mockup"
+              alt="BoloSetu AI Campaign Analytics Dashboard Mockup"
               className="rounded-2xl border border-slate-850/60 w-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
             />
           </div>
@@ -184,7 +184,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-900 py-8 text-center text-[10px] text-slate-600">
-        <p>&copy; {new Date().getFullYear()} Vani AI. All rights reserved. Safety compliant outbound Indic telecalling.</p>
+        <p>&copy; {new Date().getFullYear()} BoloSetu AI. All rights reserved. Safety compliant outbound Indic telecalling.</p>
       </footer>
     </div>
   );

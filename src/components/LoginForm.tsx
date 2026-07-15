@@ -80,7 +80,7 @@ export default function LoginForm() {
         <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-650/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
           <PhoneCall size={24} />
         </div>
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Log in to Vani AI</h2>
+        <h2 className="text-xl font-bold text-slate-100 tracking-tight">Log in to BoloSetu AI</h2>
         <p className="text-xs text-slate-400">Access your organization campaign and call logs.</p>
       </div>
 

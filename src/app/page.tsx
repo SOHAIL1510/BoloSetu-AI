@@ -93,7 +93,7 @@ export default function Dashboard() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="h-10 w-10 border-4 border-t-indigo-500 border-r-indigo-500 border-b-slate-800 border-l-slate-800 rounded-full animate-spin"></div>
-        <p className="text-slate-400 text-sm font-semibold tracking-wider uppercase">Loading Vani AI...</p>
+        <p className="text-slate-400 text-sm font-semibold tracking-wider uppercase">Loading BoloSetu AI...</p>
       </div>
     );
   }

@@ -14,7 +14,7 @@ export default function Login() {
         fallback={
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col items-center justify-center py-20 space-y-4">
             <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
-            <p className="text-xs text-slate-450">Loading Vani AI...</p>
+            <p className="text-xs text-slate-455">Loading BoloSetu AI...</p>
           </div>
         }
       >

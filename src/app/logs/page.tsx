@@ -404,7 +404,7 @@ export default function CallLogs() {
                         }`}
                       >
                         <span className="text-[9px] text-slate-500 mb-1 font-semibold uppercase">
-                          {m.role === "ai" ? "AI ASSISTANT (Vani)" : "CUSTOMER"}
+                          {m.role === "ai" ? "AI ASSISTANT (BoloSetu)" : "CUSTOMER"}
                         </span>
                         <div
                           className={`max-w-[85%] px-4 py-2 rounded-xl text-xs leading-relaxed ${

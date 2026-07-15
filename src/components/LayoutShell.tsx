@@ -103,7 +103,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           </div>
           <div>
             <h1 className="font-bold text-lg tracking-wider bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent uppercase">
-              Vani AI
+              BoloSetu AI
             </h1>
             <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">{userOrgName}</p>
           </div>
@@ -175,11 +175,11 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           {/* Navigation Title */}
           <div className="hidden md:block">
             <h2 className="text-lg font-semibold text-slate-200">
-              {navItems.find((item) => item.href === pathname)?.name || "Vani AI"}
+              {navItems.find((item) => item.href === pathname)?.name || "BoloSetu AI"}
             </h2>
           </div>
 
-          <div className="md:hidden font-bold text-indigo-400 tracking-wider">VANI AI</div>
+          <div className="md:hidden font-bold text-indigo-400 tracking-wider">BOLOSETU AI</div>
 
           {/* Topbar Actions */}
           <div className="flex items-center gap-4">
@@ -287,7 +287,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 <Phone size={20} className="transform -rotate-12" />
               </div>
               <div>
-                <h1 className="font-bold text-lg tracking-wider text-slate-100 uppercase">Vani AI</h1>
+                <h1 className="font-bold text-lg tracking-wider text-slate-100 uppercase">BoloSetu AI</h1>
                 <p className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider">{userOrgName}</p>
               </div>
             </div>

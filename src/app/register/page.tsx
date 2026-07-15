@@ -71,7 +71,7 @@ export default function Register() {
           <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-650/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
             <PhoneCall size={24} />
           </div>
-          <h2 className="text-xl font-bold text-slate-100 tracking-tight">Create your Vani AI Workspace</h2>
+          <h2 className="text-xl font-bold text-slate-100 tracking-tight">Create your BoloSetu AI Workspace</h2>
           <p className="text-xs text-slate-400">Establish a new organization and deploy voice telecalling.</p>
         </div>
 

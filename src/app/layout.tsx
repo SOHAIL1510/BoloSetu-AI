@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vani AI - AI Voice Telecalling Agent",
+  title: "BoloSetu AI - AI Voice Telecalling Agent",
   description: "Enterprise outbound cold calling automated by conversational Indic AI agents.",
 };
 

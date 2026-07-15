@@ -91,7 +91,7 @@ export default function CustomerImport() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "vani_customer_import_template.csv");
+    link.setAttribute("download", "bolosetu_customer_import_template.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
